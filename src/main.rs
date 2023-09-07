@@ -1,6 +1,9 @@
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Arc;
+mod accumulator;
+
+use std::sync::{Arc, Mutex};
 use std::thread;
+
+use accumulator::Accumulator;
 
 fn main() {
     let a = 38;
@@ -9,14 +12,15 @@ fn main() {
 }
 
 fn add(n1: i32, n2: i32) -> i32 {
-    let sum = Arc::new(<AtomicI32>::new(n1));
+    let acc = Arc::new(Mutex::new(Accumulator::new(n1)));
     let (count, increment) = if n2 > 0 { (n2, 1) } else { (-n2, -1) };
     let mut handles = vec![];
 
     for _ in 0..count {
-        let inner_sum = Arc::clone(&sum);
+        let guarded_acc = Arc::clone(&acc);
         handles.push(thread::spawn(move || {
-            inner_sum.fetch_add(increment, Ordering::SeqCst);
+            let mut guarded_acc = guarded_acc.lock().unwrap();
+            guarded_acc.add(increment);
         }));
     }
 
@@ -24,5 +28,6 @@ fn add(n1: i32, n2: i32) -> i32 {
         handle.join().unwrap();
     }
 
-    sum.load(Ordering::SeqCst)
+    let final_acc = acc.lock().unwrap();
+    final_acc.get_sum()
 }
